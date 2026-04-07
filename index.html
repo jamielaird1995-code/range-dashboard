@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Range Performance Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#f8f8f6;--surface:#ffffff;--surface2:#f1f1ee;
+  --border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.15);
+  --text:#1a1a1a;--muted:#666;--muted2:#999;
+  --accent:#0abab5;--accent2:#81d8d0;--red:#ef4444;--amber:#f59e0b;--green:#22c55e;
+}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.5;min-height:100vh;}
+
+/* UPLOAD */
+#uploadScreen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem;}
+.upload-logo{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.2em;color:var(--muted);text-transform:uppercase;margin-bottom:3rem;}
+.upload-box{border:1px dashed var(--border2);border-radius:4px;padding:4rem 5rem;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;max-width:480px;width:100%;}
+.upload-box:hover,.upload-box.drag{border-color:var(--accent);background:rgba(200,245,90,0.03);}
+.upload-icon{width:40px;height:40px;margin:0 auto 1.5rem;opacity:0.4;}
+.upload-title{font-size:18px;font-weight:500;margin-bottom:0.5rem;}
+.upload-sub{color:var(--muted);font-size:13px;margin-bottom:1.5rem;}
+.upload-btn{display:inline-block;background:var(--accent);color:#ffffff;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:10px 24px;border-radius:2px;cursor:pointer;font-weight:500;border:none;}
+.upload-note{margin-top:1.5rem;font-size:11px;color:var(--muted2);font-family:'DM Mono',monospace;}
+#fileInput{display:none;}
+.demo-btn{margin-top:1rem;background:transparent;border:1px solid rgba(10,186,181,0.3);color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;padding:10px 24px;border-radius:2px;cursor:pointer;}
+
+/* DASHBOARD */
+#dashboard{display:none;flex-direction:column;min-height:100vh;}
+
+header{border-bottom:1px solid var(--border);padding:0 2rem;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg);z-index:100;}
+.header-logo{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.15em;color:var(--muted);text-transform:uppercase;}
+.header-right{display:flex;align-items:center;gap:16px;}
+.header-file{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);}
+.header-version{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted2);}
+.header-reset{background:none;border:1px solid var(--border2);color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;padding:5px 12px;border-radius:2px;cursor:pointer;letter-spacing:0.05em;}
+.header-reset:hover{border-color:var(--red);color:var(--red);}
+
+/* TABS */
+.tab-bar{border-bottom:1px solid var(--border);background:var(--surface);display:flex;align-items:center;padding:0 2rem;gap:0;}
+.tab-btn{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);padding:14px 20px;cursor:pointer;border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color 0.15s,border-color 0.15s;}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-btn:hover{color:var(--text);}
+
+/* FILTERS */
+.filters{border-bottom:1px solid var(--border);padding:10px 2rem;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface);}
+.filter-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted2);}
+select{background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:5px 10px;border-radius:2px;cursor:pointer;outline:none;}
+select:focus{border-color:var(--accent);}
+
+.main{padding:1.5rem 2rem;flex:1;max-width:1600px;margin:0 auto;width:100%;}
+
+/* METRICS */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:1.25rem;}
+.metric{background:var(--surface);padding:1rem 1.25rem;}
+.metric-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.metric-value{font-size:22px;font-weight:500;}
+.metric-delta{font-family:'DM Mono',monospace;font-size:11px;margin-top:2px;}
+.up{color:var(--accent);}.down{color:var(--red);}.flat{color:var(--muted);}
+
+/* CHARTS GRID */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;}
+.charts-grid.full{grid-template-columns:1fr;}
+@media(max-width:1100px){#top5Cards,#slowCards{grid-template-columns:repeat(3,minmax(0,1fr))!important;}} @media(max-width:900px){.charts-grid{grid-template-columns:1fr;} #top5Cards,#slowCards{grid-template-columns:repeat(2,minmax(0,1fr))!important;}} @media(max-width:600px){#top5Cards,#slowCards{grid-template-columns:1fr!important;}}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:1.25rem;}
+.chart-card.full{grid-column:1/-1;}
+.card-title{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:1rem;}
+.chart-wrap{position:relative;width:100%;}
+.h200{height:200px;}.h240{height:240px;}.h280{height:280px;}.h320{height:320px;}
+
+/* LEGEND */
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
+.leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);}
+.leg-sq{width:10px;height:10px;border-radius:1px;flex-shrink:0;}
+.leg-line{width:18px;height:2px;flex-shrink:0;}
+
+/* WOC ROW */
+.woc-wrap{margin-top:12px;}
+.woc-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted2);margin-bottom:4px;letter-spacing:0.06em;text-transform:uppercase;}
+.woc-row{display:flex;gap:2px;overflow-x:auto;padding-bottom:2px;}
+.woc-cell{flex:1;min-width:24px;text-align:center;font-family:'DM Mono',monospace;font-size:9px;padding:3px 1px;border-radius:2px;white-space:nowrap;}
+
+/* STYLE CARDS */
+.style-card{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px;height:100%;box-sizing:border-box;}
+.style-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.style-card-name{font-size:13px;font-weight:500;color:var(--text);}
+.style-card-rank{font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);background:rgba(10,186,181,0.1);padding:2px 7px;border-radius:2px;}
+.style-card-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;}
+.style-stat-label{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:1px;}
+.style-stat-value{font-size:13px;font-weight:500;}
+.gender-split{display:flex;gap:1px;height:6px;border-radius:3px;overflow:hidden;margin-bottom:5px;}
+.gender-bar-m{background:#7dd3fc;}.gender-bar-w{background:#f4a8d4;}
+.gender-label{display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted2);margin-bottom:10px;}
+.colour-section{margin-top:5px;}
+.colour-section-title{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:3px;display:flex;align-items:center;gap:4px;}
+.colour-dot-m{width:6px;height:6px;border-radius:50%;background:#7dd3fc;display:inline-block;}
+.colour-dot-w{width:6px;height:6px;border-radius:50%;background:#f4a8d4;display:inline-block;}
+.colour-row{display:flex;justify-content:space-between;align-items:center;padding:2px 0;border-bottom:1px solid var(--border);font-size:10px;}
+.colour-row:last-child{border-bottom:none;}
+.colour-name{color:var(--muted);flex:1;}
+.colour-units{color:var(--text);font-weight:400;min-width:50px;text-align:right;}
+.colour-asp{font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);min-width:50px;text-align:right;}
+
+/* SLOW BURN CARDS */
+.slow-card-rank{font-family:'DM Mono',monospace;font-size:10px;padding:2px 7px;border-radius:2px;}
+
+/* SECTION HEADER */
+.section-header{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px;}
+
+/* CW TABLE */
+.cw-table{width:100%;border-collapse:collapse;font-size:12px;overflow-x:auto;display:block;}
+.cw-table th{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted2);padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+.cw-table td{padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap;color:var(--muted);}
+.cw-table td:first-child{color:var(--text);}
+.cw-table tr:last-child td{border-bottom:none;}
+.cw-table tr:hover td{background:var(--surface2);}
+
+/* HEATMAP */
+.heatmap-scroll{overflow-x:auto;}
+.heatmap-table{border-collapse:collapse;font-size:10px;}
+.heatmap-table th{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted2);padding:3px 4px;text-align:center;white-space:nowrap;}
+.heatmap-table th.row-h{text-align:left;min-width:140px;}
+.heatmap-table td.row-label{font-size:10px;color:var(--text);padding:3px 8px 3px 0;white-space:nowrap;border-right:1px solid var(--border);}
+.heatmap-table td.row-label span{display:block;color:var(--muted2);font-size:9px;}
+.hm-cell{width:26px;min-width:26px;height:24px;text-align:center;vertical-align:middle;cursor:default;font-family:'DM Mono',monospace;font-size:8px;}
+
+.no-data{color:var(--muted2);font-family:'DM Mono',monospace;font-size:12px;text-align:center;padding:2rem;}
+
+/* STYLE BREAKDOWN SELECTOR */
+.style-selector-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 2rem;display:flex;gap:10px;align-items:center;}
+</style>
+</head>
+<body>
+
+<!-- UPLOAD -->
+<div id="uploadScreen">
+  <div class="upload-logo">Range Performance — Dashboard</div>
+  <div class="upload-box" id="dropZone">
+    <svg class="upload-icon" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="8" width="32" height="26" rx="2" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M14 8V6a2 2 0 012-2h8a2 2 0 012 2v2" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M20 18v8M17 21l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M12 30h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <div class="upload-title">Drop your Excel file here</div>
+    <div class="upload-sub">Add headers Full Name, Style, Gender, Colour, Metric in columns A–E</div>
+    <label class="upload-btn" for="fileInput">Choose file</label>
+    <div class="upload-note">Week columns start at F onwards</div>
+    <div style="margin-top:1rem;"><button class="demo-btn" onclick="loadDemoData()">Try with demo data</button></div>
+  </div>
+  <input type="file" id="fileInput" accept=".xlsx,.xls">
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <header>
+    <div class="header-logo">Range Performance</div>
+    <div class="header-right">
+      <div class="header-version">v1 · 01 Apr 2026 14:30</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button id="switchFileA" onclick="switchDataset('A')" style="font-family:'DM Mono',monospace;font-size:10px;padding:4px 10px;border-radius:2px;cursor:pointer;border:1px solid var(--border2);background:rgba(10,186,181,0.12);color:var(--accent);" title="Active dataset"></button>
+        <button id="switchFileB" onclick="switchDataset('B')" style="font-family:'DM Mono',monospace;font-size:10px;padding:4px 10px;border-radius:2px;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--muted);" title="Kids dataset"></button>
+        <label style="font-family:'DM Mono',monospace;font-size:10px;padding:4px 10px;border-radius:2px;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--muted);" for="fileInputB">+ Load file B</label>
+        <input type="file" id="fileInputB" accept=".xlsx,.xls" style="display:none;">
+      </div>
+      <div class="header-file" id="fileName"></div>
+      <button class="header-reset" onclick="resetDashboard()">↩ New file</button>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tabOverviewBtn" onclick="switchTab('overview')">Range overview</button>
+    <button class="tab-btn" id="tabStyleBtn" onclick="switchTab('style')">Style breakdown</button>
+  </div>
+
+  <!-- ═══ TAB 1: RANGE OVERVIEW ═══ -->
+  <div id="tabOverview">
+
+    <!-- OVERVIEW FILTERS -->
+    <div class="filters" style="justify-content:flex-start;">
+      <div style="max-width:1600px;margin:0 auto;width:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <span class="filter-label">Weeks</span>
+        <select id="fWeeks" onchange="renderOverview()">
+          <option value="all">Full year</option>
+          <option value="13">Last 13 weeks</option>
+          <option value="6">Last 6 weeks</option>
+          <option value="3">Last 3 weeks</option>
+        </select>
+        <span class="filter-label">Show top</span>
+        <select id="fTopX" onchange="renderOverview()">
+          <option value="all">All styles</option>
+          <option value="5">Top 5</option>
+          <option value="8">Top 8</option>
+          <option value="10">Top 10</option>
+          <option value="12">Top 12</option>
+          <option value="15">Top 15</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="main">
+
+      <!-- FULL YEAR LINE GRAPH -->
+      <div class="chart-card" style="margin-bottom:1.25rem;">
+        <div class="card-title">Net pairs by style — full year</div>
+        <div id="yearLegend" class="legend"></div>
+        <div class="chart-wrap h280"><canvas id="chartYear"></canvas></div>
+      </div>
+
+      <!-- METRICS -->
+      <div class="metrics" id="ovMetrics"></div>
+
+      <!-- TOP 5 STYLES -->
+      <div class="section-header">Top 5 styles — latest week</div>
+      <div id="top5Cards" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:1.25rem;align-items:stretch;"></div>
+
+      <!-- BIGGEST JUMPS -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.25rem;">
+        <div>
+          <div class="section-header" style="margin-bottom:10px;">Biggest jumps up ↑ — pairs vs last week</div>
+          <div id="jumpsUp"></div>
+        </div>
+        <div>
+          <div class="section-header" style="margin-bottom:10px;">Biggest jumps down ↓ — pairs vs last week</div>
+          <div id="jumpsDown"></div>
+        </div>
+      </div>
+
+      <!-- HIGH STOCK LOW SELL-THROUGH -->
+      <div class="section-header" style="margin-top:0.5rem;">High stock · slow sell-through — top 5 styles</div>
+      <div id="slowCards" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:1.25rem;align-items:stretch;"></div>
+
+      <!-- GENDER SPLIT -->
+      <div class="section-header">Gender split</div>
+      <div class="charts-grid" style="margin-bottom:0;">
+        <div class="chart-card">
+          <div class="card-title">Full year — pairs by gender</div>
+          <div class="chart-wrap h200"><canvas id="chartGenderYear"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="card-title">This week — pairs by gender</div>
+          <div class="chart-wrap h200"><canvas id="chartGenderWeek"></canvas></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ TAB 2: STYLE BREAKDOWN ═══ -->
+  <div id="tabStyle" style="display:none;">
+
+    <!-- STYLE SELECTOR -->
+    <div class="style-selector-bar">
+      <span class="filter-label">Style</span>
+      <select id="sbStyle" onchange="renderStyleBreakdown()"><option value="">Select a style</option></select>
+      <span class="filter-label">Gender</span>
+      <select id="sbGender" onchange="renderStyleBreakdown()"><option value="all">All</option></select>
+      <span class="filter-label">Colour</span>
+      <select id="sbColour" onchange="renderStyleBreakdown()"><option value="all">All colours</option></select>
+      <span class="filter-label">Weeks</span>
+      <select id="sbWeeks" onchange="renderStyleBreakdown()">
+        <option value="all">All weeks</option>
+        <option value="13">Last 13</option>
+        <option value="6">Last 6</option>
+        <option value="3">Last 3</option>
+      </select>
+    </div>
+
+    <div class="main">
+      <div id="sbMetrics" class="metrics" style="margin-bottom:1.25rem;"></div>
+
+      <div class="chart-card" style="margin-bottom:1rem;">
+        <div class="card-title">Sales &amp; ASP by week</div>
+        <div class="legend">
+          <div class="leg"><div class="leg-sq" style="background:#378ADD"></div>Net pairs (left)</div>
+          <div class="leg"><div class="leg-line" style="background:#0abab5"></div>ASP £ (right)</div>
+        </div>
+        <div class="chart-wrap h240"><canvas id="sbChartSales"></canvas></div>
+        <div class="woc-wrap">
+          <div class="woc-label">Weeks of cover</div>
+          <div class="woc-row" id="sbWocRow"></div>
+          <div class="woc-label" style="margin-top:6px;">Active colourways</div>
+          <div class="woc-row" id="sbCwRow"></div>
+        </div>
+      </div>
+
+      <div class="chart-card" style="margin-bottom:1rem;">
+        <div class="card-title">Stock depletion</div>
+        <div class="chart-wrap h200"><canvas id="sbChartStock"></canvas></div>
+      </div>
+
+      <div class="charts-grid" style="margin-bottom:1rem;">
+        <div class="chart-card">
+          <div class="card-title">Active colourways per week</div>
+          <div class="chart-wrap h200"><canvas id="sbChartColours"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="card-title">ASP by colourway</div>
+          <div class="chart-wrap h200"><canvas id="sbChartAspColour"></canvas></div>
+        </div>
+      </div>
+
+      <div class="charts-grid" style="margin-bottom:1rem;">
+        <div class="chart-card">
+          <div class="card-title">Pairs by colourway (all weeks)</div>
+          <div class="chart-wrap h200"><canvas id="sbChartPieColour"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="card-title">Pairs by gender (all weeks)</div>
+          <div class="chart-wrap h200"><canvas id="sbChartPieGender"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-card" style="margin-bottom:1rem;">
+        <div class="card-title">Score heatmap — ASP × volume</div>
+        <div class="heatmap-scroll"><table class="heatmap-table" id="sbHeatmap"></table></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="card-title">Colourway breakdown (latest week)</div>
+        <div style="overflow-x:auto"><table class="cw-table" id="sbCwTable"></table></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let allData = [], weeks = [], charts = {};
+const VERSION = 'v1 · 01 Apr 2026 14:30';
+
+
+// ── MULTI DATASET ─────────────────────────────────────────────────────────────
+const datasets = { A: null, B: null };
+let activeDataset = 'A';
+
+function switchDataset(key) {
+  if (!datasets[key]) return;
+  activeDataset = key;
+  allData = datasets[key].data;
+  weeks = datasets[key].weeks;
+  document.getElementById('fileName').textContent = datasets[key].name;
+  document.getElementById('switchFileA').style.background = key==='A'?'rgba(10,186,181,0.12)':'transparent';
+  document.getElementById('switchFileA').style.color = key==='A'?'var(--accent)':'var(--muted)';
+  document.getElementById('switchFileB').style.background = key==='B'?'rgba(10,186,181,0.12)':'transparent';
+  document.getElementById('switchFileB').style.color = key==='B'?'var(--accent)':'var(--muted)';
+  Object.values(charts).forEach(c=>c&&c.destroy());
+  charts={};
+  renderOverview();
+  renderStyleBreakdown();
+}
+
+function storeDataset(key, data_, weeks_, name) {
+  datasets[key] = { data: data_, weeks: weeks_, name };
+  const btn = document.getElementById('switchFile'+key);
+  btn.textContent = name.length > 12 ? name.substring(0,12)+'…' : name;
+  if (key==='A') btn.title = name;
+  if (key==='B') btn.title = name;
+}
+
+// ── PARSE ─────────────────────────────────────────────────────────────────────
+function parseExcel(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type:'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:null });
+
+    let headerRow=-1, weekStartCol=-1;
+    for (let r=0;r<Math.min(10,rows.length);r++) {
+      if (!rows[r]) continue;
+      for (let c=0;c<rows[r].length;c++) {
+        const v=String(rows[r][c]||'').trim();
+        if (v.match(/wk\s*\d+/i)||v.match(/week\s*\d+/i)||v.match(/fy\s*\d/i)) {
+          headerRow=r; weekStartCol=c; break;
+        }
+      }
+      if (headerRow>=0) break;
+    }
+    if (headerRow<0) { alert('Could not find week headers.'); return; }
+
+    weeks = rows[headerRow].slice(weekStartCol).filter(Boolean).map(v=>String(v).trim());
+    allData = [];
+    const metricKws=['Net Pairs','Net Revenue','ASP','Stock Available'];
+
+    for (let r=headerRow+1;r<rows.length;r++) {
+      const row=rows[r];
+      if (!row||row.every(v=>v===null)) continue;
+      const style=row[1]?String(row[1]).trim():null;
+      const gender=row[2]?String(row[2]).trim().toUpperCase():null;
+      const colour=row[3]?String(row[3]).trim():null;
+      const metric=row[4]?String(row[4]).trim():null;
+      if (!style||!gender||!colour||!metric) continue;
+      if (!metricKws.some(k=>metric.toLowerCase().includes(k.toLowerCase()))) continue;
+      const values=row.slice(weekStartCol).map(v=>{
+        if (v===null||v===undefined||v==='') return null;
+        const n=parseFloat(String(v).replace(/[£,]/g,''));
+        return isNaN(n)?null:n;
+      });
+      allData.push({style,gender,colour,metric,values});
+    }
+    if (allData.length===0){alert('No data rows found. Check file format.');return;}
+    const isB = file === fileBRef;
+    const key = isB ? 'B' : 'A';
+    storeDataset(key, allData, weeks, file.name);
+    if (key==='A') {
+      document.getElementById('fileName').textContent=file.name;
+      initDashboard();
+    } else {
+      document.getElementById('switchFileB').style.borderColor='var(--accent)';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+const getMetricRows=(data,kw)=>data.filter(d=>d.metric.toLowerCase().includes(kw.toLowerCase()));
+const sumWeek=(rows,wi)=>{const v=rows.map(r=>r.values[wi]).filter(v=>v!==null);return v.length?v.reduce((a,b)=>a+b,0):null;};
+const avgWeek=(rows,wi)=>{const v=rows.map(r=>r.values[wi]).filter(v=>v!==null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+const delta=(a,b)=>(a===null||b===null||b===0)?null:(a-b)/Math.abs(b)*100;
+const fmtDelta=d=>{if(d===null)return'';const s=d>=0?'+':'';const c=d>1?'up':d<-1?'down':'flat';return`<span class="${c}">${s}${d.toFixed(1)}% wow</span>`;};
+const fmtNum=(v,t)=>{if(v===null||isNaN(v))return'—';if(t==='pairs')return Math.round(v).toLocaleString();if(t==='asp')return'£'+v.toFixed(2);if(t==='rev')return'£'+Math.round(v).toLocaleString();return v.toLocaleString();};
+
+function getSlicedData(data, weeksVal) {
+  const n = weeksVal==='all'?null:parseInt(weeksVal);
+  const start = n?Math.max(0,weeks.length-n):0;
+  const end = weeks.length-1;
+  const slicedWeeks = weeks.slice(start,end+1);
+  const sliced = data.map(d=>({...d,values:d.values.slice(start,end+1)}));
+  return {sliced, slicedWeeks, start, end};
+}
+
+function getLastWi(pRows) {
+  for(let i=pRows[0]?.values.length-1||0;i>=0;i--){
+    if(pRows.some(r=>r.values[i]!==null&&r.values[i]>0)) return i;
+  }
+  return (pRows[0]?.values.length||1)-1;
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function initDashboard() {
+  const styles=[...new Set(allData.map(d=>d.style))].sort();
+  const genders=[...new Set(allData.map(d=>d.gender))].sort();
+  const colours=[...new Set(allData.map(d=>d.colour))].sort();
+
+  const sbStyle=document.getElementById('sbStyle');
+  sbStyle.innerHTML='<option value="">Select a style</option>'+styles.map(s=>`<option value="${s}">${s}</option>`).join('');
+  sbStyle.value=styles[0]||'';
+
+  const sbGender=document.getElementById('sbGender');
+  sbGender.innerHTML='<option value="all">All</option>'+genders.map(g=>`<option value="${g}">${g}</option>`).join('');
+
+  const sbColour=document.getElementById('sbColour');
+  sbColour.innerHTML='<option value="all">All colours</option>'+colours.map(c=>`<option value="${c}">${c}</option>`).join('');
+
+  document.getElementById('uploadScreen').style.display='none';
+  document.getElementById('dashboard').style.display='flex';
+  renderOverview();
+  renderStyleBreakdown();
+}
+
+// ── TAB SWITCH ────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('tabOverview').style.display=tab==='overview'?'block':'none';
+  document.getElementById('tabStyle').style.display=tab==='style'?'block':'none';
+  document.getElementById('tabOverviewBtn').classList.toggle('active',tab==='overview');
+  document.getElementById('tabStyleBtn').classList.toggle('active',tab==='style');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 1: OVERVIEW
+// ══════════════════════════════════════════════════════════════════════════════
+function renderOverview() {
+  const weeksVal=document.getElementById('fWeeks').value;
+  const topX=document.getElementById('fTopX')?.value||'all';
+  const {sliced,slicedWeeks}=getSlicedData(allData,weeksVal);
+  renderYearLine(allData,topX); // always full year, filtered by topX
+  renderOvMetrics(sliced,slicedWeeks);
+  renderTop5(sliced,slicedWeeks);
+  renderJumps(sliced,slicedWeeks);
+  renderSlowBurn(sliced,slicedWeeks);
+  renderGenderSplit(sliced,slicedWeeks);
+}
+
+// 40 maximally distinct colours
+const PALETTE40 = [
+  '#e6194b','#3cb44b','#4363d8','#f58231','#911eb4',
+  '#42d4f4','#f032e6','#bfef45','#fabed4','#469990',
+  '#dcbeff','#9a6324','#fffac8','#800000','#aaffc3',
+  '#808000','#ffd8b1','#000075','#a9a9a9','#ffffff',
+  '#e6beff','#ffe119','#008080','#e05c5c','#4fc3f7',
+  '#81c784','#ff8a65','#ba68c8','#4dd0e1','#dce775',
+  '#f06292','#aed581','#7986cb','#ffb74d','#26c6da',
+  '#a1887f','#90a4ae','#ef5350','#66bb6a','#ab47bc'
+];
+
+let yearSelected = new Set(); // selected style indices
+
+// Full year line -- one line per style, pairs aggregated + interactive
+function renderYearLine(data, topX) {
+  // Get all styles sorted by latest week pairs, limit to topX
+  const allStyles=[...new Set(data.map(d=>d.style))];
+  const pRows=getMetricRows(data,'pairs');
+  let lastWi=weeks.length-1;
+  for(let i=weeks.length-1;i>=0;i--){if(pRows.some(r=>r.values[i]!==null&&r.values[i]>0)){lastWi=i;break;}}
+  const stylesByVol=allStyles.map(s=>({s,v:sumWeek(pRows.filter(r=>r.style===s),lastWi)||0})).sort((a,b)=>b.v-a.v);
+  const n=topX==='all'?stylesByVol.length:parseInt(topX);
+  const styles=stylesByVol.slice(0,n).map(x=>x.s);
+
+  function buildDatasets(selected) {
+    const ds = [];
+    styles.forEach((style,i)=>{
+      const col = PALETTE40[i % PALETTE40.length];
+      const isActive = selected.size===0 || selected.has(i);
+      const pRows=getMetricRows(data.filter(d=>d.style===style),'pairs');
+      const aRows=getMetricRows(data.filter(d=>d.style===style),'asp');
+      const pVals=weeks.map((_,wi)=>sumWeek(pRows,wi));
+      const aVals=weeks.map((_,wi)=>avgWeek(aRows,wi));
+      // Pairs line
+      ds.push({
+        type:'line', label:style, data:pVals,
+        borderColor: isActive ? col : col+'33',
+        backgroundColor:'transparent',
+        borderWidth: isActive ? 2 : 1,
+        pointRadius: isActive ? 2 : 0,
+        tension:0.3, spanGaps:true,
+        yAxisID:'yP', order:2,
+        styleIndex:i
+      });
+      // ASP dotted line -- only when selected
+      if (selected.size > 0 && selected.has(i)) {
+        ds.push({
+          type:'line', label:style+' ASP', data:aVals,
+          borderColor: col,
+          backgroundColor:'transparent',
+          borderWidth:1.5,
+          borderDash:[5,4],
+          pointRadius:0,
+          tension:0.3, spanGaps:true,
+          yAxisID:'yA', order:1,
+          styleIndex:i, isAsp:true
+        });
+      }
+    });
+    return ds;
+  }
+
+  function renderLegend(selected) {
+    const legend=document.getElementById('yearLegend');
+    legend.innerHTML=styles.map((s,i)=>{
+      const col=PALETTE40[i%PALETTE40.length];
+      const active=selected.size===0||selected.has(i);
+      return `<div class="leg" style="cursor:pointer;opacity:${active?1:0.35};transition:opacity 0.15s;" onclick="yearLegendClick(${i},event)" data-idx="${i}">
+        <div class="leg-line" style="background:${col}"></div>${s}
+      </div>`;
+    }).join('');
+  }
+
+  if(charts.year) charts.year.destroy();
+  yearSelected = new Set();
+
+  const canvas = document.getElementById('chartYear');
+
+  charts.year = new Chart(canvas, {
+    data:{labels:weeks, datasets:buildDatasets(yearSelected)},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'nearest',intersect:true},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#ffffff',borderColor:'rgba(0,0,0,0.1)',borderWidth:1,
+          titleColor:'#1a1a1a',bodyColor:'#666',
+          filter: item => !item.dataset.isAsp && (yearSelected.size===0 || yearSelected.has(item.dataset.styleIndex)),
+          callbacks:{label:ctx=>{
+            if(ctx.dataset.isAsp) return null;
+            return ' '+ctx.dataset.label+': '+Math.round(ctx.parsed.y).toLocaleString()+' pairs';
+          }}
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#999',font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:13},grid:{color:'rgba(0,0,0,0.06)'}},
+        yP:{type:'linear',position:'left',ticks:{color:'#999',font:{size:9},callback:v=>v.toLocaleString()},grid:{color:'rgba(0,0,0,0.06)'},title:{display:false}},
+        yA:{type:'linear',position:'right',ticks:{color:'#999',font:{size:9},callback:v=>'£'+v.toFixed(0)},grid:{display:false},display:yearSelected.size>0}
+      },
+      onClick:(evt)=>{
+        const pts=charts.year.getElementsAtEventForMode(evt,'nearest',{intersect:false},true);
+        if(!pts.length)return;
+        const ds=charts.year.data.datasets[pts[0].datasetIndex];
+        if(ds.isAsp)return;
+        const idx=ds.styleIndex;
+        if(evt.native.shiftKey){
+          if(yearSelected.has(idx))yearSelected.delete(idx);
+          else yearSelected.add(idx);
+        } else {
+          if(yearSelected.size===1&&yearSelected.has(idx)) yearSelected.clear();
+          else{yearSelected.clear();yearSelected.add(idx);}
+        }
+        refreshYearLine(data,styles,buildDatasets,renderLegend);
+      }
+    }
+  });
+
+  renderLegend(yearSelected);
+
+  window.yearLegendClick = (idx, evt) => {
+    if(evt.shiftKey){
+      if(yearSelected.has(idx))yearSelected.delete(idx);
+      else yearSelected.add(idx);
+    } else {
+      if(yearSelected.size===1&&yearSelected.has(idx)) yearSelected.clear();
+      else{yearSelected.clear();yearSelected.add(idx);}
+    }
+    refreshYearLine(data,styles,buildDatasets,renderLegend);
+  };
+}
+
+function refreshYearLine(data,styles,buildDatasets,renderLegend) {
+  charts.year.data.datasets = buildDatasets(yearSelected);
+  charts.year.options.scales.yA.display = yearSelected.size > 0;
+  charts.year.update('none');
+  renderLegend(yearSelected);
+}
+
+// Overview metrics
+function renderOvMetrics(data,sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const aRows=getMetricRows(data,'asp');
+  const rRows=getMetricRows(data,'revenue');
+  const sRows=getMetricRows(data,'stock');
+  let lastWi=-1,prevWi=-1;
+  for(let i=sw.length-1;i>=0;i--){const p=sumWeek(pRows,i);if(p!==null&&p>0){if(lastWi<0)lastWi=i;else if(prevWi<0){prevWi=i;break;}}}
+  const pairs=lastWi>=0?sumWeek(pRows,lastWi):null;
+  const pairsPrev=prevWi>=0?sumWeek(pRows,prevWi):null;
+  const asp=lastWi>=0?avgWeek(aRows,lastWi):null;
+  const aspPrev=prevWi>=0?avgWeek(aRows,prevWi):null;
+  const rev=lastWi>=0?sumWeek(rRows,lastWi):null;
+  const revPrev=prevWi>=0?sumWeek(rRows,prevWi):null;
+  const stock=lastWi>=0?sumWeek(sRows,lastWi):null;
+  const stockPrev=prevWi>=0?sumWeek(sRows,prevWi):null;
+  const allCols=[...new Set(pRows.map(r=>r.colour))];
+  const activeCols=allCols.filter(col=>{const r=pRows.find(d=>d.colour===col);return r&&lastWi>=0&&r.values[lastWi]!==null&&r.values[lastWi]>0;});
+  document.getElementById('ovMetrics').innerHTML=`
+    <div class="metric"><div class="metric-label">Total pairs (latest wk)</div><div class="metric-value">${fmtNum(pairs,'pairs')}</div><div class="metric-delta">${fmtDelta(delta(pairs,pairsPrev))}</div></div>
+    <div class="metric"><div class="metric-label">Avg ASP (latest wk)</div><div class="metric-value">${fmtNum(asp,'asp')}</div><div class="metric-delta">${fmtDelta(delta(asp,aspPrev))}</div></div>
+    <div class="metric"><div class="metric-label">Net revenue (latest wk)</div><div class="metric-value">${fmtNum(rev,'rev')}</div><div class="metric-delta">${fmtDelta(delta(rev,revPrev))}</div></div>
+    <div class="metric"><div class="metric-label">Stock available</div><div class="metric-value">${fmtNum(stock,'pairs')}</div><div class="metric-delta">${fmtDelta(delta(stock,stockPrev))}</div></div>
+    <div class="metric"><div class="metric-label">Active colourways</div><div class="metric-value">${activeCols.length} / ${allCols.length}</div><div class="metric-delta" style="font-size:11px;color:var(--muted)">active this week</div></div>
+  `;
+}
+
+// Top 5 style cards
+function renderTop5(data,sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const aRows=getMetricRows(data,'asp');
+  const sRows=getMetricRows(data,'stock');
+  let lastWi=-1,prevWi=-1;
+  for(let i=sw.length-1;i>=0;i--){const p=sumWeek(pRows,i);if(p!==null&&p>0){if(lastWi<0)lastWi=i;else if(prevWi<0){prevWi=i;break;}}}
+  if(lastWi<0){document.getElementById('top5Cards').innerHTML='';return;}
+
+  const styles=[...new Set(allData.map(d=>d.style))];
+  const scored=styles.map(style=>{
+    const rows=pRows.filter(r=>r.style===style);
+    const pairs=sumWeek(rows,lastWi)||0;
+    const last4=Array.from({length:4},(_,i)=>sumWeek(rows,Math.max(0,lastWi-3+i)));
+    return{style,pairs,pairsPrev:sumWeek(rows,prevWi)||0,last4};
+  }).filter(s=>s.pairs>0).sort((a,b)=>b.pairs-a.pairs).slice(0,5);
+
+  const maxStock=Math.max(...styles.map(st=>sumWeek(sRows.filter(r=>r.style===st),lastWi)||0));
+
+  const colourRows=(items)=>items.length?items.map(c=>`
+    <div class="colour-row">
+      <div class="colour-name">${c.col}</div>
+      <div class="colour-units">${Math.round(c.pairs).toLocaleString()} pairs</div>
+      <div class="colour-asp">${c.asp?'£'+c.asp.toFixed(0):'—'}</div>
+    </div>`).join(''):`<div class="colour-row"><div class="colour-name" style="color:var(--muted2)">—</div></div>`;
+
+  document.getElementById('top5Cards').innerHTML=scored.map((s,rank)=>{
+    const asp=avgWeek(aRows.filter(r=>r.style===s.style),lastWi);
+    const wow=delta(s.pairs,s.pairsPrev);
+    const wowHtml=wow!==null?`<span class="${wow>=0?'up':'down'}">${wow>=0?'+':''}${wow.toFixed(1)}%</span>`:'—';
+    // Dynamic gender split -- works for any genders in data
+    const styleGenders=[...new Set(allData.filter(d=>d.style===s.style).map(d=>d.gender))];
+    const genderPals=['#7dd3fc','#f4a8d4','#0abab5','#fbbf24','#f87171'];
+    const genderCounts=styleGenders.map(g=>sumWeek(allData.filter(d=>d.style===s.style&&d.gender===g&&d.metric.toLowerCase().includes('pairs')),lastWi)||0);
+    const tg=genderCounts.reduce((a,b)=>a+b,0)||1;
+    const genderPcts=genderCounts.map(c=>((c/tg)*100).toFixed(0));
+    // Keep mp/wp for backwards compat
+    const mp=genderCounts[0]||0, wp=genderCounts[1]||0;
+    const mpPct=genderPcts[0]||0, wpPct=genderPcts[1]||0;
+    const stock=sumWeek(sRows.filter(r=>r.style===s.style),lastWi);
+    const stockPct=stock&&maxStock?Math.min(100,(stock/maxStock)*100).toFixed(0):0;
+    const sc=stockPct>66?'#7dd3fc':stockPct>33?'#fbbf24':'#f87171';
+    const wi=lastWi+(weeks.length-sw.length);
+    const topColoursByGender=styleGenders.map(g=>{
+      const cols=[...new Set(allData.filter(d=>d.style===s.style&&d.gender===g).map(d=>d.colour))];
+      return{gender:g,colours:cols.map(col=>{
+        const pr=allData.find(d=>d.style===s.style&&d.gender===g&&d.colour===col&&d.metric.toLowerCase().includes('pairs'));
+        const ar=allData.find(d=>d.style===s.style&&d.gender===g&&d.colour===col&&d.metric.toLowerCase().includes('asp'));
+        return{col,pairs:pr?pr.values[wi]||0:0,asp:ar?ar.values[wi]:null};
+      }).filter(c=>c.pairs>0).sort((a,b)=>b.pairs-a.pairs).slice(0,3)};
+    });
+    const mensTop3=topColoursByGender[0]?.colours||[];
+    const womensTop3=topColoursByGender[1]?.colours||[];
+    return `<div class="style-card">
+      <div class="style-card-header"><div class="style-card-name">${s.style}</div><div class="style-card-rank">#${rank+1}</div></div>
+      <div class="style-card-stats">
+        <div><div class="style-stat-label">Pairs</div><div class="style-stat-value">${Math.round(s.pairs).toLocaleString()}</div></div>
+        <div><div class="style-stat-label">WoW</div><div class="style-stat-value" style="font-size:13px;">${wowHtml}</div></div>
+        <div><div class="style-stat-label">Avg ASP</div><div class="style-stat-value">${asp?'£'+asp.toFixed(0):'—'}</div></div>
+      </div>
+      <div style="margin-bottom:6px;">
+        <div class="style-stat-label" style="margin-bottom:4px;">Last 4 weeks</div>
+        ${(()=>{
+          const vals=(s.last4||[0,0,0,0]).map(v=>v||0);
+          const maxV=Math.max(...vals)||1;
+          const minV=Math.min(...vals.filter(v=>v>0))||0;
+          const W=200,H=44,padX=8,padY=6;
+          const pts=vals.map((v,i)=>{
+            const x=padX+i*((W-padX*2)/3);
+            const range=maxV-minV||1;
+            const y=H-padY-((v-minV)/range*(H-padY*2));
+            return{x:x.toFixed(1),y:y.toFixed(1),v};
+          });
+          const trend=vals[3]>=vals[0];
+          const lineCol=trend?'#0abab5':'#f87171';
+          const polyPts=pts.map(p=>p.x+','+p.y).join(' ');
+          return `<svg viewBox="0 0 ${W} ${H+28}" width="100%" height="${H+28}" style="display:block;">
+            <polyline points="${polyPts}" fill="none" stroke="${lineCol}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+            ${pts.map((p,i)=>{
+              const wkLabel=weeks[Math.max(0,lastWi-3+i)]?.replace(/FY \d+\/\d+ /i,'').replace('Wk ','Wk')||('Wk'+(i+1));
+              return `
+              <circle cx="${p.x}" cy="${p.y}" r="${i===3?3:2}" fill="${i===3?lineCol:lineCol+'88'}"/>
+              <text x="${p.x}" y="${H+13}" text-anchor="middle" font-family="monospace" font-size="8" fill="${i===3?lineCol:'#999'}">
+                ${p.v?Math.round(p.v).toLocaleString():'—'}
+              </text>
+              <text x="${p.x}" y="${H+24}" text-anchor="middle" font-family="monospace" font-size="7" fill="#bbb">
+                ${wkLabel}
+              </text>`;
+            }).join('')}
+          </svg>`;
+        })()}
+      </div>
+      <div class="gender-split">${styleGenders.map((g,i)=>`<div style="height:100%;width:${genderPcts[i]}%;background:${genderPals[i%genderPals.length]};"></div>`).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${styleGenders.map((g,i)=>`<span style="font-family:'DM Mono',monospace;font-size:10px;font-weight:500;color:${genderPals[i%genderPals.length]};white-space:nowrap;">${g} ${genderPcts[i]}%</span>`).join('')}</div>
+      <div style="margin:4px 0 6px;">
+        <div style="display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted2);margin-bottom:3px;text-transform:uppercase;"><span>Stock</span><span style="color:${sc}">${stock?stock.toLocaleString():'—'}</span></div>
+        <div style="height:4px;background:rgba(0,0,0,0.07);border-radius:2px;overflow:hidden;"><div style="width:${stockPct}%;height:4px;background:${sc};border-radius:2px;"></div></div>
+      </div>
+      ${topColoursByGender.map((tg,i)=>tg.colours.length?`<div class="colour-section" ${i>0?'style="margin-top:5px;"':''}>
+        <div class="colour-section-title"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${genderPals[i%genderPals.length]};"></span>${tg.gender} colours</div>
+        ${colourRows(tg.colours)}
+      </div>`:''  ).join('')}
+    </div>`;
+  }).join('');
+}
+
+// ── BIGGEST JUMPS ─────────────────────────────────────────────────────────────
+function renderJumps(data, sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const sRows=getMetricRows(data,'stock');
+  let lastWi=-1,prevWi=-1;
+  for(let i=sw.length-1;i>=0;i--){
+    const p=sumWeek(pRows,i);
+    if(p!==null&&p>0){if(lastWi<0)lastWi=i;else if(prevWi<0){prevWi=i;break;}}
+  }
+  if(lastWi<0||prevWi<0){
+    document.getElementById('jumpsUp').innerHTML='<div class="no-data">Not enough weeks</div>';
+    document.getElementById('jumpsDown').innerHTML='<div class="no-data">Not enough weeks</div>';
+    return;
+  }
+
+  const combos=[...new Set(data.map(d=>d.style+'|||'+d.gender+'|||'+d.colour))];
+  const colourJumps=combos.map(key=>{
+    const [style,gender,colour]=key.split('|||');
+    const sp=pRows.filter(r=>r.style===style&&r.gender===gender&&r.colour===colour);
+    const curr=sumWeek(sp,lastWi)||0;
+    const prev=sumWeek(sp,prevWi)||0;
+    const diff=curr-prev;
+    const pct=prev>0?((diff/prev)*100):null;
+    const stock=sumWeek(sRows.filter(r=>r.style===style&&r.gender===gender&&r.colour===colour),lastWi)||0;
+    const prev4=Array.from({length:4},(_,i)=>sumWeek(sp,Math.max(0,lastWi-3+i)));
+    return{style,gender,colour,curr,prev,diff,pct,stock,prev4};
+  }).filter(s=>s.curr>0||s.prev>0);
+
+  const genders=[...new Set(colourJumps.map(s=>s.gender))];
+  const genderPals=['#7dd3fc','#f4a8d4','#0abab5','#fbbf24','#f87171'];
+
+  function jumpCard(s, isUp, allForDir) {
+    const col=isUp?'#86efac':'#f87171';
+    const bg=isUp?'rgba(134,239,172,0.08)':'rgba(248,113,113,0.08)';
+    const arrow=isUp?'↑':'↓';
+    const pctStr=s.pct!==null?(s.pct>=0?'+':'')+s.pct.toFixed(1)+'%':'—';
+    const maxBar=Math.max(...allForDir.map(x=>Math.abs(x.diff)))||1;
+    const barW=Math.min(100,(Math.abs(s.diff)/maxBar)*100).toFixed(0);
+    const stockFlag=!isUp&&s.stock>0&&s.stock<s.curr*4?`<div style="font-family:'DM Mono',monospace;font-size:9px;color:#fbbf24;margin-top:3px;">⚠ Low stock ${s.stock.toLocaleString()}</div>`:'';
+    const stockNote=!isUp&&s.stock>s.curr*8?`<div style="font-family:'DM Mono',monospace;font-size:9px;color:#f87171;margin-top:3px;">⚑ High stock ${s.stock.toLocaleString()}</div>`:'';
+    const vals=(s.prev4||[0,0,0,0]).map(v=>v||0);
+    const maxV=Math.max(...vals)||1;
+    const W=80,H=20,pad=2;
+    const pts=vals.map((v,i)=>{
+      const x=pad+i*((W-pad*2)/3);
+      const y=H-pad-((v/maxV)*(H-pad*2));
+      return x.toFixed(1)+','+y.toFixed(1);
+    }).join(' ');
+    const lastX=(pad+3*((W-pad*2)/3)).toFixed(1);
+    const lastY=(H-pad-((vals[3]/maxV)*(H-pad*2))).toFixed(1);
+    return `<div style="background:${bg};border:1px solid ${col}22;border-radius:4px;padding:10px 12px;">
+      <div style="font-size:11px;font-weight:500;margin-bottom:1px;line-height:1.3;">${s.style}</div>
+      <div style="font-size:11px;font-weight:400;color:var(--muted);margin-bottom:1px;">${s.colour}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted2);margin-bottom:6px;">${s.gender}</div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px;">
+        <span style="font-size:22px;font-weight:500;color:${col};">${arrow}${Math.abs(s.diff).toLocaleString()}</span>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;color:${col};">${pctStr}</span>
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted2);margin-bottom:6px;">${s.prev.toLocaleString()} → ${s.curr.toLocaleString()} pairs</div>
+      <div style="height:4px;background:rgba(0,0,0,0.06);border-radius:2px;margin-bottom:6px;">
+        <div style="width:${barW}%;height:4px;background:${col};border-radius:2px;"></div>
+      </div>
+      <svg viewBox="0 0 ${W} ${H+16}" width="100%" height="${H+16}" style="display:block;margin-bottom:2px;">
+        <polyline points="${pts}" fill="none" stroke="${col}" stroke-opacity="0.5" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="${lastX}" cy="${lastY}" r="2" fill="${col}"/>
+        ${vals.map((v,i)=>{
+          const x=pad+i*((W-pad*2)/3);
+          return `<text x="${x}" y="${H+14}" text-anchor="middle" font-family="monospace" font-size="7" fill="rgba(0,0,0,0.3)">${v?Math.round(v).toLocaleString():''}</text>`;
+        }).join('')}
+      </svg>
+      ${stockFlag}${stockNote}
+    </div>`;
+  }
+
+  function buildSection(direction) {
+    const isUp = direction === 'up';
+    let html = '';
+    genders.forEach((gender, gi) => {
+      const gCol = genderPals[gi % genderPals.length];
+      const forGender = colourJumps.filter(s=>s.gender===gender);
+      const items = isUp
+        ? forGender.filter(s=>s.diff>0).sort((a,b)=>b.diff-a.diff).slice(0,4)
+        : forGender.filter(s=>s.diff<0).sort((a,b)=>a.diff-b.diff).slice(0,4);
+      if (!items.length) return;
+      html += `<div style="margin-bottom:1.25rem;">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:500;color:${gCol};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,0.06);">${gender}</div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;">
+          ${items.map(s=>jumpCard(s,isUp,forGender.filter(x=>isUp?x.diff>0:x.diff<0))).join('')}
+        </div>
+      </div>`;
+    });
+    return html || '<div class="no-data">No data</div>';
+  }
+
+  document.getElementById('jumpsUp').innerHTML = buildSection('up');
+  document.getElementById('jumpsDown').innerHTML = buildSection('down');
+}
+
+// Slow burn -- by style + worst 3 colours per gender by lowest pairs
+function renderSlowBurn(data,sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const sRows=getMetricRows(data,'stock');
+  const lastWi=sw.length-1;
+
+  function calcWoc(pr,sr) {
+    const stock=sumWeek(sr,lastWi);
+    const prev4=Array.from({length:4},(_,j)=>lastWi-j).filter(i=>i>=0).map(i=>sumWeek(pr,i)).filter(v=>v!==null&&v>0);
+    const avg=prev4.length?prev4.reduce((a,v)=>a+v,0)/prev4.length:null;
+    if(!stock||!avg) return null;
+    return{woc:parseFloat((stock/avg).toFixed(1)),stock:Math.round(stock),avg:Math.round(avg)};
+  }
+
+  function colourRows(items) {
+    return items.length ? items.map(c=>`
+      <div class="colour-row">
+        <div class="colour-name">${c.col}</div>
+        <div class="colour-units">${Math.round(c.pairs).toLocaleString()} pairs</div>
+        <div class="colour-asp" style="color:var(--muted)">${c.stock.toLocaleString()} stk</div>
+      </div>`).join('') : `<div class="colour-row"><div class="colour-name" style="color:var(--muted2)">—</div></div>`;
+  }
+
+  // Top 5 styles by highest WOC (aggregated across genders)
+  const styles=[...new Set(data.map(d=>d.style))];
+  const styleScores=styles.map(style=>{
+    const sp=pRows.filter(r=>r.style===style);
+    const ss=sRows.filter(r=>r.style===style);
+    const res=calcWoc(sp,ss);
+    if(!res) return null;
+    // Dynamic gender split
+    const styleGenders=[...new Set(data.filter(d=>d.style===style).map(d=>d.gender))];
+    const genderPals=['#7dd3fc','#f4a8d4','#0abab5','#fbbf24','#f87171'];
+    const genderCounts=styleGenders.map(g=>sumWeek(pRows.filter(r=>r.style===style&&r.gender===g),lastWi)||0);
+    const tg=genderCounts.reduce((a,b)=>a+b,0)||1;
+    const genderPcts=genderCounts.map(c=>((c/tg)*100).toFixed(0));
+    const mpPct=genderPcts[0]||0, wpPct=genderPcts[1]||0;
+    // Worst 3 colours per gender dynamically
+    const worstByGender=styleGenders.map(g=>{
+      const gCols=[...new Set(data.filter(d=>d.style===style&&d.gender===g).map(d=>d.colour))];
+      return{gender:g,colours:gCols.map(col=>{
+        const pr=pRows.filter(r=>r.style===style&&r.gender===g&&r.colour===col);
+        const sr=sRows.filter(r=>r.style===style&&r.gender===g&&r.colour===col);
+        return{col,pairs:sumWeek(pr,lastWi)||0,stock:Math.round(sumWeek(sr,lastWi)||0)};
+      }).sort((a,b)=>a.pairs-b.pairs).slice(0,3)};
+    });
+    return{style,res,styleGenders,genderPcts,genderPals,mpPct,wpPct,
+      mensWorst3:worstByGender[0]?.colours||[],
+      womensWorst3:worstByGender[1]?.colours||[],
+      worstByGender};
+  }).filter(Boolean).sort((a,b)=>b.res.woc-a.res.woc).slice(0,5);
+
+  const maxStock=Math.max(...styleScores.map(s=>s.res.stock));
+
+  document.getElementById('slowCards').innerHTML=styleScores.map((s,rank)=>{
+    const urgency=s.res.woc>20?'#f87171':s.res.woc>12?'#fbbf24':'#86efac';
+    const stockPct=maxStock?Math.min(100,(s.res.stock/maxStock)*100).toFixed(0):0;
+    return `<div class="style-card">
+      <div class="style-card-header">
+        <div class="style-card-name">${s.style}</div>
+        <div class="slow-card-rank" style="background:rgba(248,113,113,0.1);color:${urgency};">#${rank+1}</div>
+      </div>
+      <div class="style-card-stats">
+        <div><div class="style-stat-label">WOC</div><div class="style-stat-value" style="color:${urgency};font-size:18px;">${s.res.woc}</div></div>
+        <div><div class="style-stat-label">Stock</div><div class="style-stat-value" style="font-size:13px;">${s.res.stock.toLocaleString()}</div></div>
+        <div><div class="style-stat-label">Avg/wk</div><div class="style-stat-value" style="font-size:13px;">${s.res.avg.toLocaleString()}</div></div>
+      </div>
+      <div class="gender-split">${s.styleGenders.map((g,i)=>`<div style="height:100%;width:${s.genderPcts[i]}%;background:${(s.genderPals||['#7dd3fc','#f4a8d4','#0abab5','#fbbf24','#f87171'])[i%5]};"></div>`).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">${s.styleGenders.map((g,i)=>`<span style="font-family:'DM Mono',monospace;font-size:10px;font-weight:500;color:${(s.genderPals||['#7dd3fc','#f4a8d4','#0abab5','#fbbf24','#f87171'])[i%5]};white-space:nowrap;">${g} ${s.genderPcts[i]}%</span>`).join('')}</div>
+      <div style="margin:4px 0 6px;">
+        <div style="display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted2);margin-bottom:3px;text-transform:uppercase;"><span>Stock</span><span style="color:${urgency}">${s.res.stock.toLocaleString()}</span></div>
+        <div style="height:4px;background:rgba(0,0,0,0.07);border-radius:2px;overflow:hidden;"><div style="width:${stockPct}%;height:4px;background:${urgency};border-radius:2px;"></div></div>
+      </div>
+      ${s.mensWorst3.length?`<div class="colour-section"><div class="colour-section-title"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${s.genderPals?s.genderPals[0]:'#7dd3fc'};"></span>${s.worstByGender[0]?.gender||''} worst colours</div>${colourRows(s.mensWorst3)}</div>`:''}
+      ${s.womensWorst3.length?`<div class="colour-section" style="margin-top:5px;"><div class="colour-section-title"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${s.genderPals?s.genderPals[1]:'#f4a8d4'};"></span>${s.worstByGender[1]?.gender||''} worst colours</div>${colourRows(s.womensWorst3)}</div>`:''}
+      ${s.worstByGender.slice(2).map((wg,i)=>wg.colours.length?`<div class="colour-section" style="margin-top:5px;"><div class="colour-section-title"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${s.genderPals?s.genderPals[i+2]:'#0abab5'};"></span>${wg.gender} worst colours</div>${colourRows(wg.colours)}</div>`:''  ).join('')}
+    </div>`;
+  }).join('');
+}
+
+// Gender split donuts
+function renderGenderSplit(data,sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const lastWi=sw.length-1;
+  const genders=[...new Set(pRows.map(r=>r.gender))];
+  const gPal=['#7dd3fc','#f4a8d4','#86efac','#fbbf24'];
+
+  const yearTotals=genders.map(g=>Math.max(0,Math.round(pRows.filter(r=>r.gender===g).reduce((sum,r)=>sum+r.values.reduce((a,v)=>a+(v||0),0),0))));
+  const weekTotals=genders.map(g=>Math.max(0,Math.round(sumWeek(pRows.filter(r=>r.gender===g),lastWi)||0)));
+
+  function donut(id,key,labels,data_,pal) {
+    if(charts[key]) charts[key].destroy();
+    charts[key]=new Chart(document.getElementById(id),{
+      type:'doughnut',
+      data:{labels,datasets:[{data:data_,backgroundColor:pal,borderColor:'#171717',borderWidth:2}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#888',font:{size:11},boxWidth:10,padding:8}},tooltip:{backgroundColor:'#ffffff',borderColor:'rgba(0,0,0,0.1)',borderWidth:1,titleColor:'#1a1a1a',bodyColor:'#666',callbacks:{label:ctx=>' '+ctx.label+': '+ctx.parsed.toLocaleString()+' pairs ('+((ctx.parsed/ctx.dataset.data.reduce((a,b)=>a+b,0))*100).toFixed(1)+'%)'}}}}
+    });
+  }
+  donut('chartGenderYear','gYear',genders,yearTotals,gPal);
+  donut('chartGenderWeek','gWeek',genders,weekTotals,gPal);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TAB 2: STYLE BREAKDOWN
+// ══════════════════════════════════════════════════════════════════════════════
+function renderStyleBreakdown() {
+  const style=document.getElementById('sbStyle').value;
+  if(!style){return;}
+  const gender=document.getElementById('sbGender').value;
+  const colour=document.getElementById('sbColour').value;
+  const weeksVal=document.getElementById('sbWeeks').value;
+
+  const base=allData.filter(d=>d.style===style&&(gender==='all'||d.gender===gender)&&(colour==='all'||d.colour===colour));
+  const{sliced,slicedWeeks}=getSlicedData(base,weeksVal);
+
+  renderSbMetrics(sliced,slicedWeeks);
+  renderSbSalesChart(sliced,slicedWeeks);
+  renderSbStockChart(sliced,slicedWeeks);
+  renderSbColoursChart(sliced,slicedWeeks);
+  renderSbAspColourChart(sliced,slicedWeeks);
+  renderSbPieCharts(sliced);
+  renderSbHeatmap(sliced,slicedWeeks);
+  renderSbCwTable(sliced,slicedWeeks);
+}
+
+function renderSbMetrics(data,sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const aRows=getMetricRows(data,'asp');
+  const rRows=getMetricRows(data,'revenue');
+  const sRows=getMetricRows(data,'stock');
+  let li=-1,pi=-1;
+  for(let i=sw.length-1;i>=0;i--){const p=sumWeek(pRows,i);if(p!==null&&p>0){if(li<0)li=i;else if(pi<0){pi=i;break;}}}
+  const m=(rows,wi,fn)=>wi>=0?fn(rows,wi):null;
+  document.getElementById('sbMetrics').innerHTML=`
+    <div class="metric"><div class="metric-label">Total pairs (latest wk)</div><div class="metric-value">${fmtNum(m(pRows,li,sumWeek),'pairs')}</div><div class="metric-delta">${fmtDelta(delta(m(pRows,li,sumWeek),m(pRows,pi,sumWeek)))}</div></div>
+    <div class="metric"><div class="metric-label">Avg ASP (latest wk)</div><div class="metric-value">${fmtNum(m(aRows,li,avgWeek),'asp')}</div><div class="metric-delta">${fmtDelta(delta(m(aRows,li,avgWeek),m(aRows,pi,avgWeek)))}</div></div>
+    <div class="metric"><div class="metric-label">Net revenue (latest wk)</div><div class="metric-value">${fmtNum(m(rRows,li,sumWeek),'rev')}</div><div class="metric-delta">${fmtDelta(delta(m(rRows,li,sumWeek),m(rRows,pi,sumWeek)))}</div></div>
+    <div class="metric"><div class="metric-label">Stock available</div><div class="metric-value">${fmtNum(m(sRows,li,sumWeek),'pairs')}</div><div class="metric-delta">${fmtDelta(delta(m(sRows,li,sumWeek),m(sRows,pi,sumWeek)))}</div></div>
+  `;
+}
+
+function renderSbSalesChart(data,sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const aRows=getMetricRows(data,'asp');
+  const sRows=getMetricRows(data,'stock');
+  const pairs=sw.map((_,wi)=>sumWeek(pRows,wi));
+  const asps=sw.map((_,wi)=>avgWeek(aRows,wi));
+  const stocks=sw.map((_,wi)=>sumWeek(sRows,wi));
+  const vm=asps.filter(v=>v!==null);
+  const aMin=vm.length?Math.min(...vm)*0.93:60,aMax=vm.length?Math.max(...vm)*1.05:120;
+
+  if(charts.sbSales)charts.sbSales.destroy();
+  charts.sbSales=new Chart(document.getElementById('sbChartSales'),{
+    data:{labels:sw,datasets:[
+      {type:'bar',label:'Net pairs',data:pairs,backgroundColor:'rgba(55,138,221,0.6)',borderColor:'#378ADD',borderWidth:0.5,yAxisID:'yP',order:2},
+      {type:'line',label:'ASP',data:asps,borderColor:'#0abab5',backgroundColor:'transparent',borderWidth:2,pointRadius:2,yAxisID:'yA',order:1,tension:0.3,spanGaps:true}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#ffffff',borderColor:'rgba(0,0,0,0.1)',borderWidth:1,titleColor:'#1a1a1a',bodyColor:'#666',callbacks:{label:ctx=>ctx.dataset.label==='Net pairs'?' Pairs: '+Math.round(ctx.parsed.y).toLocaleString():' ASP: £'+ctx.parsed.y.toFixed(2)}}},
+      scales:{x:{ticks:{color:'#999',font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:13},grid:{display:false}},yP:{type:'linear',position:'left',ticks:{color:'#999',font:{size:9},callback:v=>v.toLocaleString()},grid:{color:'rgba(0,0,0,0.06)'}},yA:{type:'linear',position:'right',min:aMin,max:aMax,ticks:{color:'#999',font:{size:9},callback:v=>'£'+v.toFixed(0)},grid:{display:false}}}
+    }
+  });
+
+  // WOC
+  const styleKeys=[...new Set(data.map(d=>d.style+'|'+d.gender+'|'+d.colour))];
+  const woc=sw.map((_,wi)=>{
+    let tw=0,weight=0;
+    styleKeys.forEach(k=>{
+      const[st,g,c]=k.split('|');
+      const pr=pRows.filter(r=>r.style===st&&r.gender===g&&r.colour===c);
+      const sr=sRows.filter(r=>r.style===st&&r.gender===g&&r.colour===c);
+      const stk=sumWeek(sr,wi);
+      const prev4=pr.length?pr[0].values.slice(Math.max(0,wi-3),wi+1).filter(v=>v!==null&&v>0):[];
+      const avg=prev4.length?prev4.reduce((a,v)=>a+v,0)/prev4.length:null;
+      if(!stk||!avg)return;
+      tw+=(stk/avg)*(sumWeek(pr,wi)||avg);
+      weight+=sumWeek(pr,wi)||avg;
+    });
+    return weight>0?parseFloat((tw/weight).toFixed(1)):null;
+  });
+
+  document.getElementById('sbWocRow').innerHTML=woc.map((v,wi)=>{
+    if(v===null)return`<div class="woc-cell" style="background:transparent;color:#555;">${sw[wi].replace(/.*Wk\s*/i,'Wk')}</div>`;
+    const bg=v>=12?'rgba(134,239,172,0.15)':v>=8?'rgba(251,191,36,0.15)':'rgba(248,113,113,0.2)';
+    const tc=v>=12?'#86efac':v>=8?'#fbbf24':'#f87171';
+    return`<div class="woc-cell" style="background:${bg};color:${tc};">${v}</div>`;
+  }).join('');
+
+  const allCols=[...new Set(pRows.map(r=>r.colour))];
+  const maxActive=allCols.length||1;
+  document.getElementById('sbCwRow').innerHTML=sw.map((_,wi)=>{
+    const active=allCols.filter(col=>{const r=pRows.find(d=>d.colour===col);return r&&r.values[wi]!==null&&r.values[wi]>0;}).length;
+    const bg=`rgba(200,245,90,${(0.1+active/maxActive*0.35).toFixed(2)})`;
+    return`<div class="woc-cell" style="background:${active?bg:'transparent'};color:#0abab5;">${active||''}</div>`;
+  }).join('');
+}
+
+function renderSbStockChart(data,sw) {
+  const sRows=getMetricRows(data,'stock');
+  const stocks=sw.map((_,wi)=>sumWeek(sRows,wi));
+  if(charts.sbStock)charts.sbStock.destroy();
+  charts.sbStock=new Chart(document.getElementById('sbChartStock'),{
+    data:{labels:sw,datasets:[{type:'line',label:'Stock',data:stocks,borderColor:'#7dd3fc',backgroundColor:'rgba(125,211,252,0.05)',borderWidth:2,pointRadius:2,tension:0.3,fill:true,spanGaps:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#ffffff',borderColor:'rgba(0,0,0,0.1)',borderWidth:1,titleColor:'#1a1a1a',bodyColor:'#666',callbacks:{label:ctx=>' Stock: '+Math.round(ctx.parsed.y).toLocaleString()}}},
+      scales:{x:{ticks:{color:'#999',font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:13},grid:{display:false}},y:{min:0,ticks:{color:'#999',font:{size:9},callback:v=>v.toLocaleString()},grid:{color:'rgba(0,0,0,0.06)'}}}}
+  });
+}
+
+function renderSbColoursChart(data,sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const cols=[...new Set(pRows.map(r=>r.colour))];
+  const counts=sw.map((_,wi)=>cols.filter(col=>{const r=pRows.find(d=>d.colour===col);return r&&r.values[wi]!==null&&r.values[wi]>0;}).length);
+  if(charts.sbColours)charts.sbColours.destroy();
+  charts.sbColours=new Chart(document.getElementById('sbChartColours'),{
+    data:{labels:sw,datasets:[{type:'bar',label:'Active colourways',data:counts,backgroundColor:'rgba(10,186,181,0.3)',borderColor:'#0abab5',borderWidth:0.5}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#ffffff',borderColor:'rgba(0,0,0,0.1)',borderWidth:1,titleColor:'#1a1a1a',bodyColor:'#666',callbacks:{label:ctx=>' '+ctx.parsed.y+' colourways'}}},
+      scales:{x:{ticks:{color:'#999',font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:13},grid:{display:false}},y:{ticks:{color:'#999',font:{size:9},stepSize:1},grid:{color:'rgba(0,0,0,0.06)'}}}}
+  });
+}
+
+function renderSbAspColourChart(data,sw) {
+  const aRows=getMetricRows(data,'asp');
+  const cols=[...new Set(aRows.map(r=>r.colour))];
+  const pal=['#0abab5','#7dd3fc','#f87171','#fbbf24','#a78bfa','#86efac','#fb923c','#e879f9'];
+  const datasets=cols.map((col,i)=>{
+    const row=aRows.find(r=>r.colour===col);
+    return{type:'line',label:col,data:row?row.values.map(v=>v):sw.map(()=>null),borderColor:pal[i%pal.length],backgroundColor:'transparent',borderWidth:1.5,pointRadius:1.5,tension:0.3,spanGaps:true};
+  });
+  if(charts.sbAspColour)charts.sbAspColour.destroy();
+  charts.sbAspColour=new Chart(document.getElementById('sbChartAspColour'),{
+    data:{labels:sw,datasets},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:true,position:'bottom',labels:{color:'#999',font:{size:9},boxWidth:8,padding:8}},tooltip:{backgroundColor:'#ffffff',borderColor:'rgba(0,0,0,0.1)',borderWidth:1,titleColor:'#1a1a1a',bodyColor:'#666',callbacks:{label:ctx=>' '+ctx.dataset.label+': £'+ctx.parsed.y.toFixed(2)}}},
+      scales:{x:{ticks:{color:'#999',font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:13},grid:{display:false}},y:{ticks:{color:'#999',font:{size:9},callback:v=>'£'+v.toFixed(0)},grid:{color:'rgba(0,0,0,0.06)'}}}}
+  });
+}
+
+function renderSbPieCharts(data) {
+  const pRows=getMetricRows(data,'pairs');
+  const pal=['#0abab5','#7dd3fc','#f87171','#fbbf24','#a78bfa','#86efac','#fb923c','#e879f9'];
+  const gPal=['#7dd3fc','#f4a8d4','#86efac','#fbbf24'];
+  const cols=[...new Set(pRows.map(r=>r.colour))];
+  const colTotals=cols.map(col=>Math.max(0,Math.round(pRows.filter(r=>r.colour===col).reduce((s,r)=>s+r.values.reduce((a,v)=>a+(v||0),0),0))));
+  const gens=[...new Set(pRows.map(r=>r.gender))];
+  const genTotals=gens.map(g=>Math.max(0,Math.round(pRows.filter(r=>r.gender===g).reduce((s,r)=>s+r.values.reduce((a,v)=>a+(v||0),0),0))));
+
+  function pie(id,key,labels,data_,pal_) {
+    if(charts[key])charts[key].destroy();
+    charts[key]=new Chart(document.getElementById(id),{type:'doughnut',data:{labels,datasets:[{data:data_,backgroundColor:pal_,borderColor:'#171717',borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#888',font:{size:10},boxWidth:10,padding:6}},tooltip:{backgroundColor:'#ffffff',borderColor:'rgba(0,0,0,0.1)',borderWidth:1,titleColor:'#1a1a1a',bodyColor:'#666',callbacks:{label:ctx=>' '+ctx.label+': '+ctx.parsed.toLocaleString()+' ('+((ctx.parsed/ctx.dataset.data.reduce((a,b)=>a+b,0))*100).toFixed(1)+'%)'}}}}});
+  }
+  pie('sbChartPieColour','sbPieC',cols,colTotals,pal);
+  pie('sbChartPieGender','sbPieG',gens,genTotals,gPal);
+}
+
+function renderSbHeatmap(data,sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const aRows=getMetricRows(data,'asp');
+  const combos=[...new Set(data.map(d=>d.style+'|'+d.gender+'|'+d.colour))];
+  const allP=combos.flatMap(k=>{const[st,g,c]=k.split('|');const r=pRows.find(d=>d.style===st&&d.gender===g&&d.colour===c);return r?r.values.filter(v=>v!==null):[];});
+  const maxP=allP.length?Math.max(...allP):1;
+  const allA=combos.flatMap(k=>{const[st,g,c]=k.split('|');const r=aRows.find(d=>d.style===st&&d.gender===g&&d.colour===c);return r?r.values.filter(v=>v!==null):[];});
+  const maxA=allA.length?Math.max(...allA):1,minA=allA.length?Math.min(...allA):0;
+  const stops=['#fee2e2','#fca5a5','#fde68a','#bbf7d0','#16a34a'];
+  function hmCol(sc){if(sc===null)return'transparent';return stops[Math.round(sc*(stops.length-1))];}
+  let html='<thead><tr><th class="row-h">Colour</th>'+sw.map(w=>`<th>${w.replace(/FY \d+\/\d+ /i,'')}</th>`).join('')+'</tr></thead><tbody>';
+  combos.forEach(k=>{
+    const[st,g,c]=k.split('|');
+    const pr=pRows.find(d=>d.style===st&&d.gender===g&&d.colour===c);
+    const ar=aRows.find(d=>d.style===st&&d.gender===g&&d.colour===c);
+    html+=`<tr><td class="row-label">${c}<span>${g}</span></td>`;
+    sw.forEach((_,wi)=>{
+      const p=pr?pr.values[wi]:null;const a=ar?ar.values[wi]:null;
+      const sc=(p!==null&&a!==null)?0.5*((a-minA)/(maxA-minA+0.001))+0.5*(p/maxP):null;
+      html+=`<td class="hm-cell" style="background:${hmCol(sc)};" title="${p!==null?Math.round(p)+' pairs · £'+(a?a.toFixed(0):'—')+' ASP':'—'}"></td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</tbody>';
+  document.getElementById('sbHeatmap').innerHTML=html;
+}
+
+function renderSbCwTable(data,sw) {
+  const pRows=getMetricRows(data,'pairs');
+  const aRows=getMetricRows(data,'asp');
+  const sRows=getMetricRows(data,'stock');
+  const rRows=getMetricRows(data,'revenue');
+  let li=sw.length-1,pi=li-1;
+  for(let i=sw.length-1;i>=0;i--){if(sumWeek(pRows,i)!==null){li=i;break;}}
+  pi=Math.max(0,li-1);
+  const combos=[...new Set(data.map(d=>d.colour+'|'+d.gender+'^'+d.style))];
+  const rows=combos.map(k=>{
+    const[cg,style]=k.split('^');const[colour,gender]=cg.split('|');
+    const pr=pRows.filter(r=>r.style===style&&r.gender===gender&&r.colour===colour);
+    const ar=aRows.filter(r=>r.style===style&&r.gender===gender&&r.colour===colour);
+    const sr=sRows.filter(r=>r.style===style&&r.gender===gender&&r.colour===colour);
+    const rr=rRows.filter(r=>r.style===style&&r.gender===gender&&r.colour===colour);
+    const pairs=sumWeek(pr,li),pairsPrev=sumWeek(pr,pi);
+    const asp=avgWeek(ar,li),aspPrev=avgWeek(ar,pi);
+    const stock=sumWeek(sr,li),rev=sumWeek(rr,li);
+    const prev4=pr[0]?pr[0].values.slice(Math.max(0,li-3),li+1).filter(v=>v!==null&&v>0):[];
+    const avg4=prev4.length?prev4.reduce((a,v)=>a+v,0)/prev4.length:null;
+    const wocVal=stock&&avg4?parseFloat((stock/avg4).toFixed(1)):null;
+    return{colour,gender,style,pairs,pairsPrev,asp,aspPrev,stock,rev,wocVal,active:pairs!==null&&pairs>0};
+  }).sort((a,b)=>(b.pairs||0)-(a.pairs||0));
+
+  const wocColor=v=>v>=12?'#86efac':v>=8?'#fbbf24':v>=4?'#fbbf24':'#f87171';
+  let html='<thead><tr><th>Colour</th><th>Gender</th><th>Status</th><th>Pairs</th><th>WoW</th><th>ASP</th><th>ASP WoW</th><th>Stock</th><th>Wks cover</th><th>Revenue</th></tr></thead><tbody>';
+  rows.forEach(r=>{
+    const pd=delta(r.pairs,r.pairsPrev),ad=delta(r.asp,r.aspPrev);
+    html+=`<tr>
+      <td>${r.colour}</td><td>${r.gender}</td>
+      <td><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${r.active?'#0abab5':'#555'};margin-right:5px;"></span>${r.active?'Active':'Inactive'}</td>
+      <td>${r.pairs!==null?Math.round(r.pairs).toLocaleString():'—'}</td>
+      <td>${pd!==null?`<span class="${pd>=0?'up':'down'}">${pd>=0?'+':''}${pd.toFixed(1)}%</span>`:'—'}</td>
+      <td>${r.asp!==null?'£'+r.asp.toFixed(2):'—'}</td>
+      <td>${ad!==null?`<span class="${ad>=0?'up':'down'}">${ad>=0?'+':''}${ad.toFixed(1)}%</span>`:'—'}</td>
+      <td>${r.stock!==null?Math.round(r.stock).toLocaleString():'—'}</td>
+      <td style="color:${r.wocVal?wocColor(r.wocVal):'var(--muted)'}">${r.wocVal||'—'}</td>
+      <td>${r.rev!==null?'£'+Math.round(r.rev).toLocaleString():'—'}</td>
+    </tr>`;
+  });
+  html+='</tbody>';
+  document.getElementById('sbCwTable').innerHTML=html;
+}
+
+// ── DEMO DATA ─────────────────────────────────────────────────────────────────
+function loadDemoData() {
+  weeks=Array.from({length:26},(_,i)=>`FY 25/26 Wk ${i+5}`);
+  function seed(n){let x=Math.sin(n*9301+49297)*233280;return x-Math.floor(x);}
+  function gen(base,wi,si,type){const trend=type==='pairs'?1+wi*0.005:1+wi*0.001;const noise=(seed(si*100+wi)-0.5)*(type==='pairs'?0.18:0.05);const seasonal=wi>18?1-(wi-18)*0.025:1;return Math.max(0,base*trend*(1+noise)*seasonal);}
+  const styles=[
+    {style:'TERRA RUNNER',gender:'MENS',colour:'OBSIDIAN',baseAsp:115,basePairs:420,baseStock:5200},
+    {style:'TERRA RUNNER',gender:'MENS',colour:'PINE',baseAsp:115,basePairs:280,baseStock:3800},
+    {style:'TERRA RUNNER',gender:'MENS',colour:'CHALK',baseAsp:115,basePairs:190,baseStock:2100},
+    {style:'TERRA RUNNER',gender:'WOMENS',colour:'OBSIDIAN',baseAsp:115,basePairs:310,baseStock:4100},
+    {style:'TERRA RUNNER',gender:'WOMENS',colour:'ROSE',baseAsp:115,basePairs:240,baseStock:3200},
+    {style:'TERRA RUNNER',gender:'WOMENS',colour:'PINE',baseAsp:115,basePairs:130,baseStock:1800},
+    {style:'MOTUS FLEX',gender:'MENS',colour:'BLACK/GREY',baseAsp:130,basePairs:320,baseStock:4600},
+    {style:'MOTUS FLEX',gender:'MENS',colour:'FOREST',baseAsp:130,basePairs:210,baseStock:3100},
+    {style:'MOTUS FLEX',gender:'WOMENS',colour:'BLACK/GREY',baseAsp:130,basePairs:180,baseStock:2900},
+    {style:'MOTUS FLEX',gender:'WOMENS',colour:'SLATE',baseAsp:130,basePairs:140,baseStock:2200},
+    {style:'TRACKER II',gender:'MENS',colour:'BRACKEN',baseAsp:165,basePairs:140,baseStock:4800},
+    {style:'TRACKER II',gender:'MENS',colour:'DARK OAK',baseAsp:165,basePairs:95,baseStock:3600},
+    {style:'TRACKER II',gender:'WOMENS',colour:'BRACKEN',baseAsp:165,basePairs:110,baseStock:3900},
+    {style:'PRIMUS KNIT',gender:'MENS',colour:'MIDNIGHT',baseAsp:88,basePairs:560,baseStock:6800},
+    {style:'PRIMUS KNIT',gender:'MENS',colour:'BONE',baseAsp:88,basePairs:390,baseStock:5100},
+    {style:'PRIMUS KNIT',gender:'MENS',colour:'CHARCOAL',baseAsp:88,basePairs:220,baseStock:3200},
+    {style:'PRIMUS KNIT',gender:'WOMENS',colour:'MIDNIGHT',baseAsp:88,basePairs:310,baseStock:4700},
+    {style:'PRIMUS KNIT',gender:'WOMENS',colour:'BONE',baseAsp:88,basePairs:260,baseStock:3900},
+    {style:'PRIMUS KNIT',gender:'WOMENS',colour:'DUSTY PINK',baseAsp:88,basePairs:180,baseStock:2600},
+  ];
+  allData=[];
+  styles.forEach((s,si)=>{
+    const pairsArr=weeks.map((_,wi)=>Math.round(gen(s.basePairs,wi,si,'pairs')));
+    let stock=s.baseStock;
+    const stockArr=weeks.map((_,wi)=>{stock=Math.max(0,stock-pairsArr[wi]);return stock;});
+    const aspArr=weeks.map((_,wi)=>parseFloat(gen(s.baseAsp,wi,si,'asp').toFixed(2)));
+    const revArr=weeks.map((_,wi)=>parseFloat((pairsArr[wi]*aspArr[wi]).toFixed(2)));
+    allData.push({style:s.style,gender:s.gender,colour:s.colour,metric:'Net Pairs',values:pairsArr});
+    allData.push({style:s.style,gender:s.gender,colour:s.colour,metric:'Net Revenue',values:revArr});
+    allData.push({style:s.style,gender:s.gender,colour:s.colour,metric:'ASP (Gross)',values:aspArr});
+    allData.push({style:s.style,gender:s.gender,colour:s.colour,metric:'Stock Available',values:stockArr});
+  });
+  document.getElementById('fileName').textContent='Demo data';
+  initDashboard();
+}
+
+// ── RESET ─────────────────────────────────────────────────────────────────────
+function resetDashboard() {
+  Object.values(charts).forEach(c=>c&&c.destroy());
+  charts={};allData=[];weeks=[];
+  document.getElementById('uploadScreen').style.display='flex';
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('fileInput').value='';
+}
+
+// ── UPLOAD HANDLERS ───────────────────────────────────────────────────────────
+let fileBRef = null;
+document.getElementById('fileInput').addEventListener('change',e=>{if(e.target.files[0])parseExcel(e.target.files[0]);});
+document.getElementById('fileInputB').addEventListener('change',e=>{
+  if(e.target.files[0]){ fileBRef=e.target.files[0]; parseExcel(e.target.files[0]); }
+});
+const dz=document.getElementById('dropZone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer.files[0])parseExcel(e.dataTransfer.files[0]);});
+</script>
+</body>
+</html>
